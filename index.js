@@ -1,7 +1,4 @@
-
-// Student Progress Management System Backend (Node.js + Express)
-
-// console.log("Starting backend...");
+require('dotenv').config();
 
 // Required Modules
 const express = require("express");
@@ -10,7 +7,7 @@ const bcrypt = require('bcrypt');
 const Jwt = require('jsonwebtoken');
 
 // Local files
-require('./db/config');
+const connectDB = require('./db/config');
 const User = require('./db/user');
 const Student = require('./db/student');
 const CodeforcesData = require('./db/codeforcesData');
@@ -23,8 +20,8 @@ const app = express();
 app.use(express.json());
 app.use(cors());
 
-const JwtKey = 'ed-tech';
-startCodeforcesCron();                                                                // Start daily CF sync job
+const JwtKey = process.env.JWT_SECRET || 'ed-tech';
+const PORT = process.env.PORT || 5000;
 
 // Authentication Middleware
 function verifyToken(req, res, next) {
@@ -381,4 +378,16 @@ app.get('/inactivity-logs', verifyToken, async (req, res) => {
 
 // Start Server
 app.get("/", (req, res) => res.send("Student Progress System Running"));
-app.listen(5000, () => console.log("\u2705 Server running on port 5000"));
+
+async function startServer() {
+  try {
+    await connectDB();
+    startCodeforcesCron();
+    app.listen(PORT, () => console.log(`Server running on port ${PORT}`));
+  } catch (err) {
+    console.error("Failed to start server:", err.message);
+    process.exit(1);
+  }
+}
+
+startServer();

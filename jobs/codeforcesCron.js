@@ -13,6 +13,7 @@
  */
 
 const cron = require('node-cron');
+const mongoose = require('mongoose');
 const Student = require('../db/student');
 const SyncCodeforcesData = require('../controllers/codeforcesController');
 const SyncConfig = require('../db/syncConfig');
@@ -26,8 +27,13 @@ const InactivityLog = require('../db/inactivityLog');
  * - Logs reminder activity
  */
 function startCodeforcesCron() {
-  cron.schedule('*/1 * * * *', async () => {
+  cron.schedule('*/15 * * * *', async () => {
     try {
+      if (mongoose.connection.readyState !== 1) {
+        console.warn('⚠️ Skipping Codeforces cron run because MongoDB is not connected.');
+        return;
+      }
+
       const now = new Date();
       const currentDay = now.getDay(); // 0 = Sunday
       const currentDate = now.getDate(); // 1–31

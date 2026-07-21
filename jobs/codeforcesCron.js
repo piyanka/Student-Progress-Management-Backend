@@ -27,7 +27,7 @@ const InactivityLog = require('../db/inactivityLog');
  * - Logs reminder activity
  */
 function startCodeforcesCron() {
-  cron.schedule('*/15 * * * *', async () => {
+  cron.schedule('* * * * *', async () => {
     try {
       if (mongoose.connection.readyState !== 1) {
         console.warn('⚠️ Skipping Codeforces cron run because MongoDB is not connected.');
@@ -47,7 +47,8 @@ function startCodeforcesCron() {
 
       const { frequency, time } = config;
 
-      // STEP 2: Compare current time with configured time
+      // STEP 2: Compare current time with configured time.
+      // The job runs every minute, so this keeps execution close to the admin-selected minute.
       const [confHour, confMin] = time.split(':').map(Number);
       const confTime = new Date(now);
       confTime.setHours(confHour, confMin, 0, 0);
@@ -85,9 +86,25 @@ function startCodeforcesCron() {
       const inactiveThreshold = new Date();
       inactiveThreshold.setDate(inactiveThreshold.getDate() - 7);
 
+      const reminderCooldown = new Date();
+      reminderCooldown.setDate(reminderCooldown.getDate() - 7);
+
       const inactiveStudents = await Student.find({
-        lastSubmissionDate: { $lt: inactiveThreshold },
-        emailReminderDisabled: { $ne: true }
+        emailReminderDisabled: { $ne: true },
+        $and: [
+          {
+            $or: [
+              { lastSubmissionDate: { $exists: false } },
+              { lastSubmissionDate: { $lt: inactiveThreshold } }
+            ]
+          },
+          {
+            $or: [
+              { lastReminderSentAt: { $exists: false } },
+              { lastReminderSentAt: { $lt: reminderCooldown } }
+            ]
+          }
+        ]
       });
 
       // STEP 7: Send reminder emails and log activity
@@ -97,6 +114,7 @@ function startCodeforcesCron() {
 
           // Increment reminder count
           student.reminderCount = (student.reminderCount || 0) + 1;
+          student.lastReminderSentAt = new Date();
           await student.save();
 
           // Log this activity

@@ -3,7 +3,7 @@ const mongoose = require("mongoose");
 const inactivityLogSchema = new mongoose.Schema({
   studentId: {
     type: mongoose.Schema.Types.ObjectId,
-    ref: "Student",
+    ref: "students",
   },
   email: String,
   lastActive: Date,

@@ -31,3 +31,12 @@ npm start
 ```
 
 The backend now reads `process.env.MONGO_URI` and falls back to local MongoDB only if that variable is not set.
+
+## Health Check
+
+Use `GET /health` to verify:
+
+- server uptime
+- MongoDB connection state
+- active sync configuration
+- the main API routes exposed by the backend

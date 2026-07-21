@@ -5,6 +5,7 @@ const express = require("express");
 const cors = require("cors");
 const bcrypt = require('bcrypt');
 const Jwt = require('jsonwebtoken');
+const mongoose = require('mongoose');
 
 // Local files
 const connectDB = require('./db/config');
@@ -22,6 +23,23 @@ app.use(cors());
 
 const JwtKey = process.env.JWT_SECRET || 'ed-tech';
 const PORT = process.env.PORT || 5000;
+const DEFAULT_SYNC_CONFIG = { frequency: "daily", time: "02:00" };
+const API_ENDPOINTS = [
+  { method: "POST", path: "/register", auth: false, purpose: "Create a user account" },
+  { method: "POST", path: "/login", auth: false, purpose: "Authenticate a user" },
+  { method: "GET", path: "/students", auth: true, purpose: "List students with pagination" },
+  { method: "POST", path: "/students/add", auth: true, purpose: "Add a student" },
+  { method: "GET", path: "/students/:id", auth: true, purpose: "Get one student" },
+  { method: "PUT", path: "/students/:id", auth: true, purpose: "Update a student" },
+  { method: "DELETE", path: "/students/:id", auth: true, purpose: "Delete a student" },
+  { method: "GET", path: "/students/search/:key", auth: true, purpose: "Search students" },
+  { method: "GET", path: "/students/:id/codeforces", auth: true, purpose: "Sync and fetch Codeforces data" },
+  { method: "GET", path: "/sync/:studentId", auth: true, purpose: "Trigger a manual sync" },
+  { method: "GET", path: "/sync-config", auth: true, purpose: "Read sync schedule" },
+  { method: "POST", path: "/sync-config", auth: true, purpose: "Update sync schedule" },
+  { method: "GET", path: "/inactivity-logs", auth: true, purpose: "View reminder logs" },
+  { method: "GET", path: "/health", auth: false, purpose: "Backend health check" },
+];
 
 // Authentication Middleware
 function verifyToken(req, res, next) {
@@ -62,7 +80,7 @@ app.post("/register", async (req, res) => {
 
     Jwt.sign({ result }, JwtKey, { expiresIn: '2h' }, (err, token) => {
       if (err) {
-        resp.send({ result: "something went wrong, Please try after sometime " });
+        return res.status(500).json({ error: "Something went wrong, please try again later." });
       }
       else {
         res.status(201).json({ result, auth: token });
@@ -288,11 +306,11 @@ app.post('/sync-config', verifyToken, async (req, res) => {
       existingConfig.frequency = frequency;
       existingConfig.time = time;
       await existingConfig.save();
+      return res.status(200).json({ success: true, config: existingConfig });
     } else {
-      await SyncConfig.create({ frequency, time });
+      const config = await SyncConfig.create({ frequency, time });
+      return res.status(200).json({ success: true, config });
     }
-
-    res.status(200).json({ success: true, message: 'Sync configuration updated successfully.' });
   } catch (err) {
     console.error('Failed to update sync config:', err);
     res.status(500).json({ error: 'Failed to update sync configuration.' });
@@ -304,10 +322,10 @@ app.get('/sync-config', verifyToken, async (req, res) => {
   try {
     const config = await SyncConfig.findOne();
     if (!config) {
-      return res.status(404).json({ frequency: "daily", time: "02:00" });
+      return res.status(200).json({ success: true, config: DEFAULT_SYNC_CONFIG });
     }
 
-    res.status(200).json(config);
+    res.status(200).json({ success: true, config });
   } catch (err) {
     console.error('Failed to fetch sync config:', err);
     res.status(500).json({ error: 'Failed to fetch sync config.' });
@@ -378,6 +396,32 @@ app.get('/inactivity-logs', verifyToken, async (req, res) => {
 
 // Start Server
 app.get("/", (req, res) => res.send("Student Progress System Running"));
+
+app.get("/health", async (req, res) => {
+  const dbReady = mongoose.connection.readyState === 1;
+  const syncConfig = dbReady
+    ? await SyncConfig.findOne().lean().catch(() => null)
+    : null;
+
+  res.status(dbReady ? 200 : 503).json({
+    success: dbReady,
+    status: dbReady ? "ok" : "degraded",
+    uptimeSeconds: Math.round(process.uptime()),
+    timestamp: new Date().toISOString(),
+    database: {
+      connected: dbReady,
+      readyState: mongoose.connection.readyState,
+    },
+    services: {
+      auth: true,
+      cron: true,
+      inactivityEmail: true,
+      codeforcesSync: true,
+    },
+    syncConfig: syncConfig || DEFAULT_SYNC_CONFIG,
+    endpoints: API_ENDPOINTS,
+  });
+});
 
 async function startServer() {
   try {

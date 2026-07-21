@@ -29,7 +29,7 @@ const studentSchema = new mongoose.Schema({
     },
     userId: {
         type: mongoose.Schema.Types.ObjectId,
-        ref: 'users',
+        ref: 'User',
         required: true
     },
     codeforcesData: {
@@ -46,6 +46,9 @@ const studentSchema = new mongoose.Schema({
         default: false
     },
     lastSubmissionDate: {
+        type: Date
+    },
+    lastReminderSentAt: {
         type: Date
     }
 
